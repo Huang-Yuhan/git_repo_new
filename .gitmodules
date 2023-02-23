@@ -1,0 +1,3 @@
+[submodule "learnGit"]
+	path = learnGit
+	url = ./submodule/learnGit
