@@ -1,5 +1,6 @@
 pub mod ownership;
 pub mod pointer;
+pub mod cli;
 #[cfg(test)]
 mod test_ownership {
     use crate::ownership::clone_or_copy::clone_or_copy;

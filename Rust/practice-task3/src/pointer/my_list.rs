@@ -57,3 +57,10 @@ impl Index<u32> for my_list::List {
     type Output=i32;
 
 }
+
+// fn two_boxes()->(&'static Box<i32>,&'static Box<i32>,i32){
+//     let arr = vec![Box::new(1), Box::new(2)];
+//     let (first, second) = (&arr[0], &arr[1]);
+//     let sum = **first + **second;
+//     (first,second,sum)
+// }
