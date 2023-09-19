@@ -1,0 +1,6 @@
+{
+    "rust-analyzer.linkedProjects": [
+        ".\\forth\\Cargo.toml"
+    ],
+    "rust-analyzer.showUnlinkedFileNotification": false
+}
