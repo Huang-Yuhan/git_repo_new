@@ -50,3 +50,14 @@ mod test_pointer{
         assert_eq!(lis[0],5);
     }
 }
+
+mod test_two_boxes{
+    use crate::pointer::twoBoxes::two_boxes;
+    #[test]
+    fn test_two_boxes(){
+        let (sum,first,second) = two_boxes::two_boxes_func();
+        assert_eq!(sum,3);
+        assert_eq!(first,1);
+        assert_eq!(second,2);
+    }
+}
