@@ -61,10 +61,10 @@ async fn main() -> std::io::Result<()> {
 
 mod UserService
 {
-    use actix_web::{web,post, App, HttpResponse, HttpServer, Responder, error};
+    use actix_web::{web,post, App, HttpResponse, HttpServer, Responder, error, HttpRequest};
     use serde::{Deserialize, Serialize};
     use actix_web::error::Error;
-    use sqlx::{mysql::MySqlPool, MySql};
+    use sqlx::{mysql::MySqlPool, MySql, Pool, types::chrono::{DateTime, TimeZone, Utc, NaiveDateTime}};
 
 
     #[derive(Debug, Deserialize)]
@@ -78,12 +78,12 @@ mod UserService
         id:i32,
         username:String,
         password:String,
-        register_time:String
+        register_date:NaiveDateTime
     }
 
     #[post("/login")]
-    pub async fn login(req: Result<web::Json<LoginRequest>, Error>,db_pool:web::Data<MySqlPool>) -> impl Responder {
-        return HttpResponse::Ok().json("登录成功");
+    pub async fn login(req:Result<web::Json<LoginRequest>,Error>,request:HttpRequest) -> impl Responder {
+        let db_pool: &Pool<MySql> = request.app_data::<Pool<MySql>>().unwrap();
         match req {
             Ok(json) => {
                 let LoginForm = LoginRequest {
@@ -92,8 +92,8 @@ mod UserService
                 };
                 //在数据库里面查找用户返回
                 let query_result = sqlx::query_as::<MySql,User>(
-                    "SELECT * FROM user_info WHERE username = ? AND password = ?",
-                ).bind(LoginForm.username).bind(LoginForm.password).fetch_optional(db_pool.get_ref()).await;
+                    "SELECT * FROM user WHERE username = ? AND password = ?",
+                ).bind(LoginForm.username).bind(LoginForm.password).fetch_optional(db_pool).await;
                 
                 match query_result {
                     Ok(Some(user)) => {
@@ -103,7 +103,7 @@ mod UserService
                         HttpResponse::Ok().json("用户名或密码错误")
                     }
                     Err(err) => {
-                        HttpResponse::InternalServerError().body("出错了")
+                        HttpResponse::InternalServerError().body(err.to_string())
                     }
                 }
             }
@@ -123,7 +123,8 @@ mod UserService
 
 mod MovieService
 {
-    use actix_web::{web,get, App, HttpResponse, HttpServer, Responder, error};
+    use actix_web::{web,get, App, HttpResponse, HttpServer, Responder, error, HttpRequest};
+    use chrono::NaiveDateTime;
     use serde::{Deserialize, Serialize};
     use actix_web::error::Error;
     use sqlx::mysql::MySqlPool;
@@ -131,18 +132,20 @@ mod MovieService
 
     #[derive(Debug, Serialize,sqlx::FromRow)]
     pub struct Movie{
-        movie_id:i32,
-        movie_name:String,
-        release_time:String,
+        id:i32,
+        name:String,
+        release_time:NaiveDateTime,
         rate:f32,
         description:String,
     }
 
-    #[get("/movie?movie_name={movie_name}")]
-    pub async fn get_movie_by_name(movie_name:web::Query<String>,db_pool:web::Data<MySqlPool>) -> impl Responder {
+    #[get("/movie/{movie_id}")]
+    pub async fn get_movie_by_name(_req:HttpRequest) -> impl Responder {
+        let db_pool = _req.app_data::<Pool<MySql>>().unwrap();
+        let movie_id:i32 = _req.match_info().get("movie_id").unwrap().parse().unwrap();
         let query_result = sqlx::query_as::<MySql,Movie>(
-            "SELECT * FROM movie_info WHERE movie_name = ?",
-        ).bind(movie_name.into_inner()).fetch_optional(db_pool.get_ref()).await;
+            "SELECT * FROM movie_info WHERE id = ?",
+        ).bind(movie_id).fetch_optional(db_pool).await;
         
         match query_result {
             Ok(Some(movie)) => {
@@ -152,7 +155,7 @@ mod MovieService
                 HttpResponse::Ok().json("没有找到该电影")
             }
             Err(err) => {
-                HttpResponse::InternalServerError().body("Internal Server Error")
+                HttpResponse::InternalServerError().body(err.to_string())
             }
         }
     }
@@ -160,7 +163,7 @@ mod MovieService
 
 mod CommentService
 {
-    use actix_web::{web,post, App, HttpResponse, HttpServer, Responder, error};
+    use actix_web::{web,post, App, HttpResponse, HttpServer, Responder, error, HttpRequest};
     use serde::{Deserialize, Serialize};
     use actix_web::error::Error;
     use sqlx::mysql::MySqlPool;
@@ -185,7 +188,8 @@ mod CommentService
     }
 
     #[post("/comment")]
-    pub async fn comment_movie(req: Result<web::Json<CommentRequest>, Error>,db_pool:web::Data<MySqlPool>) -> impl Responder {
+    pub async fn comment_movie(req: Result<web::Json<CommentRequest>, Error>,_req:HttpRequest) -> impl Responder {
+        let db_pool = _req.app_data::<Pool<MySql>>().unwrap();
         match req {
             Ok(json) => {
                 let comment_form = CommentRequest {
@@ -197,7 +201,7 @@ mod CommentService
                 //在数据库里面查找用户返回
                 let query_result = sqlx::query::<MySql>(
                     "INSERT INTO comment_info (movie_name,commentator,comment_content,rate) VALUES (?,?,?,?)",
-                ).bind(comment_form.movie_name.clone()).bind(comment_form.commentator.clone()).bind(comment_form.comment_content.clone()).bind(comment_form.rate).execute(db_pool.get_ref()).await;
+                ).bind(comment_form.movie_name.clone()).bind(comment_form.commentator.clone()).bind(comment_form.comment_content.clone()).bind(comment_form.rate).execute(db_pool).await;
                 
                 match query_result {
                     Ok(_) => {
@@ -205,7 +209,7 @@ mod CommentService
                         //在数据库里面查找所有关于这部电影的评分
                         let query_result = sqlx::query_as::<MySql,Comment>(
                             "SELECT * FROM comment_info WHERE movie_name = ?",
-                        ).bind(comment_form.movie_name.clone()).fetch_all(db_pool.get_ref()).await;
+                        ).bind(comment_form.movie_name.clone()).fetch_all(db_pool).await;
 
                         let mut sum:f32 = 0.0;
                         let mut count:i32 = 0;
@@ -216,7 +220,7 @@ mod CommentService
 
                         let query_movie_result = sqlx::query::<MySql>(
                             "UPDATE movie_info SET rate = ? WHERE movie_name = ?",
-                        ).bind(sum/count as f32).bind(comment_form.movie_name.clone()).execute(db_pool.get_ref()).await;
+                        ).bind(sum/count as f32).bind(comment_form.movie_name.clone()).execute(db_pool).await;
                         HttpResponse::Ok().json("评论成功")
 
                     }
